@@ -42,7 +42,7 @@ stages:
           displayName: 'Publish Restler Test'
           condition: and(succeeded(), eq('${{parameters.Production}}', 'No'))
           inputs:
-              buildContext: $(Build.SourcesDirectory)/artifacts/restler-fuzzer-drop
+              buildContext: $(Build.SourcesDirectory)
               command: buildAndPush
               containerRegistry: acrrestler
               repository: restler
@@ -61,4 +61,3 @@ stages:
               Dockerfile: $(Build.SourcesDirectory)/docker/Dockerfile
               tags: |
                 ${{ parameters.RestlerBuildTag }}
-      
