@@ -709,7 +709,7 @@ module SwaggerVisitors =
                         schemaCache.add schema grammarElement exampleValue.IsSome
                         grammarElement |> cont
             else
-                let grammarElement =
+                let grammarElement = zzz
                     let innerProperty = { InnerProperty.name = ""
                                           payload = None
                                           propertyType = if schema.IsArray then Array else Object
