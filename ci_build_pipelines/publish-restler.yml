@@ -23,7 +23,6 @@ variables:
     value: $(version.major).$(version.minor).$(version.revision)
 
 stages:
-  - template: stages/build/build.yml
 
   - stage: publish
     jobs:
@@ -33,10 +32,6 @@ stages:
         steps:
         - checkout: self
 
-        - task: DownloadPipelineArtifact@2
-          inputs:
-            artifact: restler-fuzzer-drop-for-docker
-            path: $(Build.SourcesDirectory)/artifacts/restler-fuzzer-drop
 
         - task: Docker@2
           displayName: 'Publish Restler Test'
