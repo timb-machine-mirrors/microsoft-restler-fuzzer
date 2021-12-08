@@ -45,14 +45,3 @@ stages:
               tags: |
                 Test-$(Build.BuildNumber)
 
-        - task: Docker@2
-          displayName: 'Publish Restler Production'
-          condition: and(succeeded(), eq('${{parameters.Production}}', 'Yes'))
-          inputs:
-              buildContext: $(Build.SourcesDirectory)/artifacts/restler-fuzzer-drop
-              command: buildAndPush
-              containerRegistry: RestApiFuzzTesting
-              repository: public/restlerfuzzer/restler
-              Dockerfile: $(Build.SourcesDirectory)/docker/Dockerfile
-              tags: |
-                ${{ parameters.RestlerBuildTag }}
