@@ -244,6 +244,8 @@ def resolve_dynamic_primitives(values, candidate_values_pool):
 
     return values
 
+global_sock = None
+
 def send_request_data(rendered_data):
     """ Helper that sends a request's rendered data to the server
     and parses its response.
@@ -257,6 +259,7 @@ def send_request_data(rendered_data):
     """
     # Set max retries and retry sleep time to be used in case
     # a status code from the retry list is encountered.
+    global global_sock
     MAX_RETRIES = 5
     custom_retry_codes = Settings().custom_retry_codes
     custom_retry_text = Settings().custom_retry_text
@@ -273,14 +276,16 @@ def send_request_data(rendered_data):
     while num_retries < MAX_RETRIES:
         try:
             # Establish connection to server
-            sock = HttpSock(Settings().connection_settings)
+            if global_sock is None:
+                #sock = HttpSock(Settings().connection_settings)
+                global_sock = HttpSock(Settings().connection_settings)
         except TransportLayerException as error:
             _RAW_LOGGING(str(error))
             return HttpResponse()
 
         # Send the request and receive the response
-        success, response = sock.sendRecv(rendered_data,
-            Settings().max_request_execution_time)
+        success, response = global_sock.sendRecv(rendered_data,
+            Settings().max_request_execution_time, closeSocket=False)
 
         status_code = response.status_code
 

@@ -58,8 +58,8 @@ class HttpSock(object):
                         certfile = Settings().client_certificate_path,
                         keyfile = Settings().client_certificate_key_path,
                     )
-                      
-                with socket.create_connection((target_ip, target_port or 443)) as sock:                  
+
+                with socket.create_connection((target_ip, target_port or 443)) as sock:
                     self._sock = context.wrap_socket(sock, server_hostname=host)
 
             else:
@@ -80,7 +80,7 @@ class HttpSock(object):
         method_name = message[0:end_of_method_idx]
         return method_name
 
-    def sendRecv(self, message, req_timeout_sec):
+    def sendRecv(self, message, req_timeout_sec, closeSocket=True):
         """ Sends a specified request to the server and waits for a response
 
         @param message: Message to be sent.
@@ -113,7 +113,8 @@ class HttpSock(object):
                 RAW_LOGGING(f"{error!s}")
             return (False, response)
         finally:
-            self._closeSocket()
+            if closeSocket:
+                self._closeSocket()
 
     def _contains_connection_closed(self, error_str):
         """ Returns whether or not the error string contains a connection closed error
