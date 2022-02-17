@@ -24,23 +24,7 @@ class HttpSock(object):
     __last_request_sent_time = time.time()
     __request_sem = threading.Semaphore()
 
-    def __init__(self, connection_settings):
-        """ Initializes a socket object using low-level python socket objects.
-
-        @param connection_settings: The connection settings for this socket
-        @type  connection_settings: ConnectionSettings
-
-        @return: None
-        @rtype : None
-
-        """
-        self._request_throttle_sec = (float)(Settings().request_throttle_ms/1000.0)\
-            if Settings().request_throttle_ms else None
-
-        self.connection_settings = connection_settings
-
-        self.ignore_decoding_failures = Settings().ignore_decoding_failures
-
+    def set_up_connection(self):
         try:
             self._sock = None
             host = Settings().host
@@ -67,6 +51,25 @@ class HttpSock(object):
                 self._sock.connect((target_ip, target_port or 80))
         except Exception as error:
             raise TransportLayerException(f"Exception Creating Socket: {error!s}")
+
+
+    def __init__(self, connection_settings):
+        """ Initializes a socket object using low-level python socket objects.
+
+        @param connection_settings: The connection settings for this socket
+        @type  connection_settings: ConnectionSettings
+
+        @return: None
+        @rtype : None
+
+        """
+        self._request_throttle_sec = (float)(Settings().request_throttle_ms/1000.0)\
+            if Settings().request_throttle_ms else None
+
+        self.connection_settings = connection_settings
+
+        self.ignore_decoding_failures = Settings().ignore_decoding_failures
+        self.set_up_connection()
 
     def __del__(self):
         """ Destructor - Closes socket
@@ -98,10 +101,20 @@ class HttpSock(object):
             self._sendRequest(message)
             if not Settings().use_test_socket:
                 http_method_name = self._get_method_from_message(message)
-                response = HttpResponse(self._recvResponse(req_timeout_sec, http_method_name))
+                received_response = self._recvResponse(req_timeout_sec, http_method_name)
+                if len(received_response) == 0:
+                    # Re-connect and try again, since this may be due to the connection being closed.
+                    RAW_LOGGING("Empty response received.  Re-creating connection and re-trying.")
+                    self._closeSocket()
+                    self.set_up_connection()
+                    self._sendRequest(message)
+                    received_response = self._recvResponse(req_timeout_sec, http_method_name)
+
+                response = HttpResponse(received_response)
             else:
                 response = self._sock.recv()
             RAW_LOGGING(f'Received: {response.to_str!r}\n')
+
             return (True, response)
         except TransportLayerException as error:
             response = HttpResponse(str(error).strip('"\''))
@@ -133,7 +146,14 @@ class HttpSock(object):
         # is being run from a Windows system.
         # Errno 104 occurs when the server terminates the connection and RESTler
         # is being run from a Linux system.
-        return '[WinError 10054]' in error_str or '[Errno 104]' in error_str
+        connection_closed_strings = [
+                # Windows
+                '[WinError 10054]',
+                '[WinError 10053]',
+                # Linux
+                '[Errno 104]'
+            ]
+        return any(filter(lambda x : x in error_str, connection_closed_strings))
 
     def _sendRequest(self, message):
         """ Sends message via current instance of socket object.

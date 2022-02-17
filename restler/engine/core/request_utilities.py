@@ -293,7 +293,7 @@ def send_request_data(rendered_data):
             return response
 
         if not success or (status_code is None):
-            _RAW_LOGGING(f"Failed to receive response.  Status: {status_code}, Response: {response.to_str}")
+            _RAW_LOGGING(f"Failed to receive response.  Success: {success}, status: {status_code}, Response: {response.to_str}")
             return HttpResponse()
 
         # Check whether a custom re-try text was provided.
