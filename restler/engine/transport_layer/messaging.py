@@ -105,12 +105,15 @@ class HttpSock(object):
             return (True, response)
         except TransportLayerException as error:
             response = HttpResponse(str(error).strip('"\''))
+
             if 'timed out' in str(error):
                 response._status_code = TIMEOUT_CODE
                 RAW_LOGGING(f"Reached max req_timeout_sec of {req_timeout_sec}.")
             elif self._contains_connection_closed(str(error)):
                 response._status_code = CONNECTION_CLOSED_CODE
-                RAW_LOGGING(f"{error!s}")
+                RAW_LOGGING(f"Connection error: {error!s}")
+            else:
+                RAW_LOGGING(f"Unknown error: {error!s}")
             return (False, response)
         finally:
             if closeSocket:

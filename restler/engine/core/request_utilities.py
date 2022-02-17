@@ -292,8 +292,8 @@ def send_request_data(rendered_data):
         if status_code and status_code in RESTLER_BUG_CODES:
             return response
 
-        if not success or not status_code:
-            _RAW_LOGGING(response.to_str)
+        if not success or (status_code is None):
+            _RAW_LOGGING(f"Failed to receive response.  Status: {status_code}, Response: {response.to_str}")
             return HttpResponse()
 
         # Check whether a custom re-try text was provided.
