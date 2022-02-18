@@ -9,6 +9,7 @@ import sys
 import ast
 import uuid
 import types
+import threading
 
 from engine.errors import ResponseParsingException
 from engine.errors import TransportLayerException
@@ -19,6 +20,7 @@ from engine.transport_layer.response import HttpResponse
 from engine.transport_layer.response import RESTLER_BUG_CODES
 from engine.transport_layer.messaging import UTF8
 from engine.transport_layer.messaging import HttpSock
+from engine.transport_layer.messaging import http_sockets
 
 last_refresh = 0
 NO_TOKEN_SPECIFIED = 'NO-TOKEN-SPECIFIED'
@@ -244,8 +246,6 @@ def resolve_dynamic_primitives(values, candidate_values_pool):
 
     return values
 
-global_sock = None
-
 def send_request_data(rendered_data):
     """ Helper that sends a request's rendered data to the server
     and parses its response.
@@ -259,7 +259,6 @@ def send_request_data(rendered_data):
     """
     # Set max retries and retry sleep time to be used in case
     # a status code from the retry list is encountered.
-    global global_sock
     MAX_RETRIES = 5
     custom_retry_codes = Settings().custom_retry_codes
     custom_retry_text = Settings().custom_retry_text
@@ -273,19 +272,15 @@ def send_request_data(rendered_data):
     # a separate settings file.
     RETRY_TEXT = ['AnotherOperationInProgress'] if custom_retry_text is None else custom_retry_text
     num_retries = 0
-    while num_retries < MAX_RETRIES:
-        try:
-            # Establish connection to server
-            if global_sock is None:
-                #sock = HttpSock(Settings().connection_settings)
-                global_sock = HttpSock(Settings().connection_settings)
-        except TransportLayerException as error:
-            _RAW_LOGGING(str(error))
-            return HttpResponse()
 
+    if 'main_sock' not in http_sockets:
+        http_sockets['main_sock'] = HttpSock(Settings().connection_settings)
+    main_sock = http_sockets['main_sock']
+
+    while num_retries < MAX_RETRIES:
         # Send the request and receive the response
-        success, response = global_sock.sendRecv(rendered_data,
-            Settings().max_request_execution_time, closeSocket=False)
+        success, response = main_sock.sendRecv(rendered_data,
+            Settings().max_request_execution_time, reconnect=Settings().reconnect_on_every_request)
 
         status_code = response.status_code
 

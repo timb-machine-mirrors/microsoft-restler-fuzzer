@@ -20,13 +20,17 @@ if util.find_spec("test_servers"):
 DELIM = "\r\n\r\n"
 UTF8 = 'utf-8'
 
+# Per-thread dictionary of socket objects
+threadLocal = threading.local()
+threadLocal.http_sockets = {}
+http_sockets = threadLocal.http_sockets
+
 class HttpSock(object):
     __last_request_sent_time = time.time()
     __request_sem = threading.Semaphore()
 
     def set_up_connection(self):
         try:
-            self._sock = None
             host = Settings().host
             target_ip = self.connection_settings.target_ip or host
             target_port = self.connection_settings.target_port
@@ -69,7 +73,8 @@ class HttpSock(object):
         self.connection_settings = connection_settings
 
         self.ignore_decoding_failures = Settings().ignore_decoding_failures
-        self.set_up_connection()
+        self._connected = False
+        self._sock = None
 
     def __del__(self):
         """ Destructor - Closes socket
@@ -83,7 +88,7 @@ class HttpSock(object):
         method_name = message[0:end_of_method_idx]
         return method_name
 
-    def sendRecv(self, message, req_timeout_sec, closeSocket=True):
+    def sendRecv(self, message, req_timeout_sec, reconnect=False):
         """ Sends a specified request to the server and waits for a response
 
         @param message: Message to be sent.
@@ -97,18 +102,20 @@ class HttpSock(object):
         @rtype : Tuple (Bool, String)
 
         """
+
         try:
+            if reconnect or not self._connected:
+                self.set_up_connection()
+                self._connected = True
+
             self._sendRequest(message)
             if not Settings().use_test_socket:
                 http_method_name = self._get_method_from_message(message)
                 received_response = self._recvResponse(req_timeout_sec, http_method_name)
-                if len(received_response) == 0:
+                if len(received_response) == 0 and not reconnect:
                     # Re-connect and try again, since this may be due to the connection being closed.
                     RAW_LOGGING("Empty response received.  Re-creating connection and re-trying.")
-                    self._closeSocket()
-                    self.set_up_connection()
-                    self._sendRequest(message)
-                    received_response = self._recvResponse(req_timeout_sec, http_method_name)
+                    return self.sendRecv(message, req_timeout_sec, reconnect=True)
 
                 response = HttpResponse(received_response)
             else:
@@ -118,18 +125,20 @@ class HttpSock(object):
             return (True, response)
         except TransportLayerException as error:
             response = HttpResponse(str(error).strip('"\''))
-
             if 'timed out' in str(error):
                 response._status_code = TIMEOUT_CODE
                 RAW_LOGGING(f"Reached max req_timeout_sec of {req_timeout_sec}.")
             elif self._contains_connection_closed(str(error)):
                 response._status_code = CONNECTION_CLOSED_CODE
                 RAW_LOGGING(f"Connection error: {error!s}")
+                if not reconnect:
+                    RAW_LOGGING("Re-creating connection and re-trying.")
+                    return self.sendRecv(message, req_timeout_sec, reconnect=True)
             else:
                 RAW_LOGGING(f"Unknown error: {error!s}")
             return (False, response)
         finally:
-            if closeSocket:
+            if reconnect:
                 self._closeSocket()
 
     def _contains_connection_closed(self, error_str):

@@ -10,9 +10,9 @@ import sys
 import json
 import multiprocessing
 from multiprocessing.dummy import Pool as ThreadPool
+
 import utils.formatting as formatting
 from restler_settings import Settings
-
 
 threadLocal = threading.local()
 # Keep TLS tlb to enforce mutual exclusion when using >1 fuzzing jobs.
@@ -435,8 +435,15 @@ class GarbageCollectorThread(threading.Thread):
 
         from engine.errors import TransportLayerException
         from engine.transport_layer import messaging
+        from engine.transport_layer.messaging import HttpSock
+        from engine.transport_layer.messaging import http_sockets
         from utils.logger import raw_network_logging as RAW_LOGGING
         from utils.logger import garbage_collector_logging as CUSTOM_LOGGING
+
+        if 'gc_sock' not in http_sockets:
+            http_sockets['gc_sock'] = HttpSock(Settings().connection_settings)
+        gc_sock = http_sockets['gc_sock']
+
         # For each object in the overflowing area, whose destructor is
         # available, render the corresponding request, send the request,
         # and then check the status code. If the resource has been determined
@@ -462,15 +469,11 @@ class GarbageCollectorThread(threading.Thread):
                 fully_rendered_data = fully_rendered_data.replace(RDELIM + type + RDELIM, value)
 
                 if fully_rendered_data:
-                    try:
-                        # Establish connection to the server
-                        sock = messaging.HttpSock(Settings().connection_settings)
-                    except TransportLayerException as error:
-                        RAW_LOGGING(f"{error!s}")
-                        return
-
                     # Send the request and receive the response
-                    success, response = sock.sendRecv(fully_rendered_data, Settings().max_request_execution_time)
+                    success, response = gc_sock.sendRecv(fully_rendered_data,
+                                                Settings().max_request_execution_time,
+                                                reconnect=Settings().reconnect_on_every_request)
+
                     if success:
                         self.monitor.increment_requests_count('gc')
                     else:

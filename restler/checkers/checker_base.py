@@ -74,15 +74,15 @@ class CheckerBase:
         @return: The response from the server
         @rtype : HttpResponse
         """
-        try:
-            sock = messaging.HttpSock(self._connection_settings)
-        except TransportLayerException as error:
-            RAW_LOGGING(f"{error!s}")
-            # connection failed
-            return HttpResponse()
+        from engine.transport_layer.messaging import HttpSock
+        from engine.transport_layer.messaging import http_sockets
+        if 'checkers_sock' not in http_sockets:
+            http_sockets['checkers_sock'] = HttpSock(Settings().connection_settings)
+        checkers_sock = http_sockets['checkers_sock']
 
-        success, response = sock.sendRecv(
-            rendered_data, req_timeout_sec=Settings().max_request_execution_time
+        success, response = checkers_sock.sendRecv(
+            rendered_data, req_timeout_sec=Settings().max_request_execution_time,
+            reconnect=Settings().reconnect_on_every_request
         )
         if not success:
             RAW_LOGGING(response.to_str)
